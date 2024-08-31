@@ -11,5 +11,8 @@ pub fn main() !void {
 
     // TODO: Handle user input
     // test
-    _ = user_input;
+    // _ = user_input;
+    if (user_input.len > 0) {
+        try stdout.print("{s}: command not found", .{user_input});
+    }
 }
