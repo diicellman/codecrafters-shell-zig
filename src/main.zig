@@ -15,7 +15,7 @@ pub fn main() !void {
         // _ = user_input;
         if (user_input.len > 0) {
             try stdout.print("{s}: command not found\n", .{user_input});
-            try stdout.print("$ exit 0", .{});
+            // try stdout.print("$ exit 0", .{});
             std.process.exit(0);
         }
     }
