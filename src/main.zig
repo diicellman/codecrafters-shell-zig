@@ -28,7 +28,6 @@ const Command = union(enum) {
 };
 
 pub fn main() !void {
-    // Uncomment this block to pass the first stage
     const stdout = std.io.getStdOut().writer();
 
     while (true) {
