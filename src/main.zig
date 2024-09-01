@@ -3,7 +3,7 @@ const std = @import("std");
 const Command = union(enum) {
     Exit: ?u8,
     // Help,
-    // Echo: []const u8,
+    Echo: []const u8,
     Unknown: []const u8,
 
     fn parse(input: []const u8) Command {
@@ -19,8 +19,8 @@ const Command = union(enum) {
             }
             // } else if (std.mem.eql(u8, trimmed, "help")) {
             //     return Command.Help;
-            // } else if (std.mem.startsWith(u8, trimmed, "echo ")) {
-            //     return Command{ .Echo = trimmed[5..] };
+        } else if (std.mem.startsWith(u8, trimmed, "echo ")) {
+            return Command{ .Echo = trimmed[5..] };
         } else {
             return Command{ .Unknown = trimmed };
         }
@@ -49,10 +49,10 @@ pub fn main() !void {
                 .Unknown => |cmd| {
                     try stdout.print("{s}: command not found\n", .{cmd});
                 },
+                .Echo => |text| {
+                    try stdout.print("{s}\n", .{text});
+                },
             }
-            // try stdout.print("{s}: command not found\n", .{user_input});
-            // try stdout.print("$ exit 0", .{});
-            // std.process.exit(0);
         }
     }
 }
