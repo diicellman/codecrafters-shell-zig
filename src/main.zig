@@ -4,6 +4,7 @@ const Command = union(enum) {
     Exit: ?u8,
     // Help,
     Echo: []const u8,
+    Type: []const u8,
     Unknown: []const u8,
 
     fn parse(input: []const u8) Command {
@@ -21,6 +22,8 @@ const Command = union(enum) {
             //     return Command.Help;
         } else if (std.mem.startsWith(u8, trimmed, "echo ")) {
             return Command{ .Echo = trimmed[5..] };
+        } else if (std.mem.startsWith(u8, trimmed, "type ")) {
+            return Command{ .Type = trimmed[5..] };
         } else {
             return Command{ .Unknown = trimmed };
         }
@@ -46,13 +49,31 @@ pub fn main() !void {
                     const status_code = maybe_code orelse 0;
                     std.process.exit(status_code);
                 },
-                .Unknown => |cmd| {
-                    try stdout.print("{s}: command not found\n", .{cmd});
-                },
                 .Echo => |text| {
                     try stdout.print("{s}\n", .{text});
+                },
+                .Type => |cmd| {
+                    const trimmed_cmd = std.mem.trim(u8, cmd, &std.ascii.whitespace);
+                    if (isBuiltinCommand(trimmed_cmd)) {
+                        try stdout.print("{s} is a shell builtin\n", .{trimmed_cmd});
+                    } else {
+                        try stdout.print("{s}: not found\n", .{trimmed_cmd});
+                    }
+                },
+                .Unknown => |cmd| {
+                    try stdout.print("{s}: command not found\n", .{cmd});
                 },
             }
         }
     }
+}
+
+fn isBuiltinCommand(cmd: []const u8) bool {
+    const builtins = [_][]const u8{ "exit", "help", "echo", "type" };
+    for (builtins) |builtin| {
+        if (std.mem.eql(u8, cmd, builtin)) {
+            return true;
+        }
+    }
+    return false;
 }
