@@ -77,7 +77,7 @@ pub fn main() !void {
                     try stdout.print("{s}: command not found\n", .{cmd});
                 },
                 .External => |ext| {
-                    if (isBuiltinCommand(ext.args[0])) {
+                    if (try findExecutable(allocator, ext.args[0]) != null) {
                         var child = std.process.Child.init(ext.args, allocator);
                         // defer child.deinit();
                         // child.stdin_behavior = .Inherit;
