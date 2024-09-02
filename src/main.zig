@@ -107,24 +107,27 @@ pub fn main() !void {
                     try stdout.print("{s}\n", .{pwd});
                 },
                 .Cd => |maybe_args| {
-                    var path: []const u8 = undefined;
-                    if (maybe_args) |args| {
+                    var path_owned: ?[]u8 = null;
+                    defer if (path_owned) |p| allocator.free(p);
+
+                    const path = if (maybe_args) |args| blk: {
                         if (mem.eql(u8, args, "~")) {
-                            path = std.process.getEnvVarOwned(allocator, "HOME") catch {
+                            path_owned = std.process.getEnvVarOwned(allocator, "HOME") catch {
                                 try stdout.print("cd: HOME not set\n", .{});
                                 continue;
                             };
-                            defer allocator.free(path);
+                            break :blk path_owned.?;
                         } else {
-                            path = args;
+                            break :blk args;
                         }
-                    } else {
-                        path = std.process.getEnvVarOwned(allocator, "HOME") catch {
+                    } else blk: {
+                        path_owned = std.process.getEnvVarOwned(allocator, "HOME") catch {
                             try stdout.print("cd: HOME not set\n", .{});
                             continue;
                         };
-                        defer allocator.free(path);
-                    }
+                        break :blk path_owned.?;
+                    };
+
                     std.process.changeCurDir(path) catch {
                         try stdout.print("cd: {s}: No such file or directory\n", .{path});
                     };
