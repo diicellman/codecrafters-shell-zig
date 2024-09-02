@@ -5,30 +5,35 @@ const ArrayList = std.ArrayList;
 
 const Command = union(enum) {
     Exit: ?u8,
-    // Help,
     Echo: []const u8,
     Type: []const u8,
     Unknown: []const u8,
+    External: struct {
+        program: []const u8,
+        args: []const []const u8,
+    },
 
-    fn parse(input: []const u8) Command {
-        const trimmed = std.mem.trim(u8, input, &std.ascii.whitespace);
-        if (std.mem.startsWith(u8, trimmed, "exit")) {
-            var parts = std.mem.split(u8, trimmed, " ");
-            _ = parts.next(); // skip "exit"
+    fn parse(input: []const u8, allocator: mem.Allocator) !Command {
+        var parts = mem.split(u8, input, " ");
+        const first = parts.next() orelse return Command{ .Unknown = input };
 
+        if (mem.eql(u8, first, "exit")) {
             if (parts.next()) |code_str| {
                 return Command{ .Exit = std.fmt.parseInt(u8, code_str, 10) catch null };
             } else {
                 return Command{ .Exit = null };
             }
-            // } else if (std.mem.eql(u8, trimmed, "help")) {
-            //     return Command.Help;
-        } else if (std.mem.startsWith(u8, trimmed, "echo ")) {
-            return Command{ .Echo = trimmed[5..] };
-        } else if (std.mem.startsWith(u8, trimmed, "type ")) {
-            return Command{ .Type = trimmed[5..] };
+        } else if (mem.eql(u8, first, "echo")) {
+            return Command{ .Echo = input[5..] };
+        } else if (mem.eql(u8, first, "type")) {
+            return Command{ .Type = input[5..] };
         } else {
-            return Command{ .Unknown = trimmed };
+            var args = ArrayList([]const u8).init(allocator);
+            try args.append(first);
+            while (parts.next()) |arg| {
+                try args.append(arg);
+            }
+            return Command{ .External = .{ .program = first, .args = try args.toOwnedSlice() } };
         }
     }
 };
@@ -49,7 +54,7 @@ pub fn main() !void {
         // TODO: Handle user input
         // _ = user_input;
         if (user_input.len > 0) {
-            const command = Command.parse(user_input);
+            const command = try Command.parse(user_input, allocator);
             switch (command) {
                 .Exit => |maybe_code| {
                     const status_code = maybe_code orelse 0;
@@ -70,6 +75,24 @@ pub fn main() !void {
                 },
                 .Unknown => |cmd| {
                     try stdout.print("{s}: command not found\n", .{cmd});
+                },
+                .External => |ext| {
+                    var child = std.process.Child.init(ext.args, allocator);
+                    // defer child.deinit();
+                    // child.stdin_behavior = .Inherit;
+                    // child.stdout_behavior = .Inherit;
+                    // child.stderr_behavior = .Inherit;
+                    // child.env_map = try std.process.getEnvMap(allocator);
+
+                    const term = try child.spawnAndWait();
+                    switch (term) {
+                        .Exited => |code| {
+                            if (code != 0) {
+                                try stdout.print("Program exited with non-zero status code: {d}\n", .{code});
+                            }
+                        },
+                        else => try stdout.print("Program terminated abnormally\n", .{}),
+                    }
                 },
             }
         }
@@ -116,3 +139,39 @@ fn findExecutable(allocator: mem.Allocator, arg: []const u8) !?[]const u8 {
 
     return null;
 }
+
+// fn runExternalProgram(allocator: mem.Allocator, program: []const u8, args: []const []const u8) !void {
+//     var full_args = try ArrayList([]const u8).initCapacity(allocator, args.len + 1);
+//     defer full_args.deinit();
+//
+//     try full_args.append(program);
+//     try full_args.appendSlice(args);
+//
+//     var child = std.process.Child.init(full_args.items, allocator);
+//     child.stdin_behavior = .Inherit;
+//     child.stdout_behavior = .Pipe;
+//     child.stderr_behavior = .Pipe;
+//
+//     try child.spawn();
+//
+//     const stdout = try child.stdout.?.reader().readAllAlloc(allocator, 1024 * 1024);
+//     defer allocator.free(stdout);
+//
+//     const stderr = try child.stderr.?.reader().readAllAlloc(allocator, 1024 * 1024);
+//     defer allocator.free(stderr);
+//
+//     const term = try child.wait();
+//
+//     const stdoutWriter = std.io.getStdOut().writer();
+//     try stdoutWriter.writeAll(stdout);
+//     try stdoutWriter.writeAll(stderr);
+//
+//     switch (term) {
+//         .Exited => |code| {
+//             if (code != 0) {
+//                 try stdoutWriter.print("Program exited with non-zero status code: {d}\n", .{code});
+//             }
+//         },
+//         else => try stdoutWriter.print("Program terminated abnormally\n", .{}),
+//     }
+// }
