@@ -13,6 +13,7 @@ const Command = union(enum) {
         args: []const []const u8,
     },
     Pwd,
+    Cd: ?[]const u8,
 
     fn parse(input: []const u8, allocator: mem.Allocator) !Command {
         var parts = mem.split(u8, input, " ");
@@ -30,6 +31,8 @@ const Command = union(enum) {
             return Command{ .Type = input[5..] };
         } else if (mem.eql(u8, first, "pwd")) {
             return Command.Pwd;
+        } else if (mem.eql(u8, first, "cd")) {
+            return Command{ .Cd = parts.next() };
         } else {
             var args = ArrayList([]const u8).init(allocator);
             try args.append(first);
@@ -103,13 +106,36 @@ pub fn main() !void {
                     };
                     try stdout.print("{s}\n", .{pwd});
                 },
+                .Cd => |maybe_args| {
+                    var path: []const u8 = undefined;
+                    if (maybe_args) |args| {
+                        if (mem.eql(u8, args, "~")) {
+                            path = std.process.getEnvVarOwned(allocator, "HOME") catch {
+                                try stdout.print("cd: HOME not set\n", .{});
+                                continue;
+                            };
+                            defer allocator.free(path);
+                        } else {
+                            path = args;
+                        }
+                    } else {
+                        path = std.process.getEnvVarOwned(allocator, "HOME") catch {
+                            try stdout.print("cd: HOME not set\n", .{});
+                            continue;
+                        };
+                        defer allocator.free(path);
+                    }
+                    std.process.changeCurDir(path) catch {
+                        try stdout.print("cd: {s}: No such file or directory\n", .{path});
+                    };
+                },
             }
         }
     }
 }
 
 fn isBuiltinCommand(cmd: []const u8) bool {
-    const builtins = [_][]const u8{ "exit", "help", "echo", "type", "pwd" };
+    const builtins = [_][]const u8{ "exit", "help", "echo", "type", "pwd", "cd" };
     for (builtins) |builtin| {
         if (std.mem.eql(u8, cmd, builtin)) {
             return true;
