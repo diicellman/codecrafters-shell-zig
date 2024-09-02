@@ -1,4 +1,7 @@
 const std = @import("std");
+const fs = std.fs;
+const mem = std.mem;
+const ArrayList = std.ArrayList;
 
 const Command = union(enum) {
     Exit: ?u8,
@@ -11,7 +14,7 @@ const Command = union(enum) {
         const trimmed = std.mem.trim(u8, input, &std.ascii.whitespace);
         if (std.mem.startsWith(u8, trimmed, "exit")) {
             var parts = std.mem.split(u8, trimmed, " ");
-            _ = parts.next(); // Skip "exit"
+            _ = parts.next(); // skip "exit"
 
             if (parts.next()) |code_str| {
                 return Command{ .Exit = std.fmt.parseInt(u8, code_str, 10) catch null };
@@ -32,6 +35,9 @@ const Command = union(enum) {
 
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     while (true) {
         try stdout.print("$ ", .{});
@@ -56,6 +62,8 @@ pub fn main() !void {
                     const trimmed_cmd = std.mem.trim(u8, cmd, &std.ascii.whitespace);
                     if (isBuiltinCommand(trimmed_cmd)) {
                         try stdout.print("{s} is a shell builtin\n", .{trimmed_cmd});
+                    } else if (try findExecutable(allocator, trimmed_cmd)) |path| {
+                        try stdout.print("{s} is {s}\n", .{ trimmed_cmd, path });
                     } else {
                         try stdout.print("{s}: not found\n", .{trimmed_cmd});
                     }
@@ -76,4 +84,35 @@ fn isBuiltinCommand(cmd: []const u8) bool {
         }
     }
     return false;
+}
+
+fn findExecutable(allocator: mem.Allocator, arg: []const u8) !?[]const u8 {
+    const env_vars = try std.process.getEnvMap(allocator);
+    // defer env_vars.deinit();
+
+    const path_value = env_vars.get("PATH") orelse "";
+    var path_it = mem.split(u8, path_value, ":");
+
+    while (path_it.next()) |path| {
+        const full_path = try fs.path.join(allocator, &[_][]const u8{ path, arg });
+        defer allocator.free(full_path);
+
+        const file = fs.openFileAbsolute(full_path, .{ .mode = .read_only }) catch {
+            continue;
+        };
+        defer file.close();
+
+        const mode = file.mode() catch {
+            continue;
+        };
+
+        const is_executable = mode & 0b001 != 0;
+        if (!is_executable) {
+            continue;
+        }
+
+        return try allocator.dupe(u8, full_path);
+    }
+
+    return null;
 }
