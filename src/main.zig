@@ -77,21 +77,25 @@ pub fn main() !void {
                     try stdout.print("{s}: command not found\n", .{cmd});
                 },
                 .External => |ext| {
-                    var child = std.process.Child.init(ext.args, allocator);
-                    // defer child.deinit();
-                    // child.stdin_behavior = .Inherit;
-                    // child.stdout_behavior = .Inherit;
-                    // child.stderr_behavior = .Inherit;
-                    // child.env_map = try std.process.getEnvMap(allocator);
+                    if (isBuiltinCommand(ext.args[0])) {
+                        var child = std.process.Child.init(ext.args, allocator);
+                        // defer child.deinit();
+                        // child.stdin_behavior = .Inherit;
+                        // child.stdout_behavior = .Inherit;
+                        // child.stderr_behavior = .Inherit;
+                        // child.env_map = try std.process.getEnvMap(allocator);
 
-                    const term = try child.spawnAndWait();
-                    switch (term) {
-                        .Exited => |code| {
-                            if (code != 0) {
-                                try stdout.print("Program exited with non-zero status code: {d}\n", .{code});
-                            }
-                        },
-                        else => try stdout.print("Program terminated abnormally\n", .{}),
+                        const term = try child.spawnAndWait();
+                        switch (term) {
+                            .Exited => |code| {
+                                if (code != 0) {
+                                    try stdout.print("Program exited with non-zero status code: {d}\n", .{code});
+                                }
+                            },
+                            else => try stdout.print("Program terminated abnormally\n", .{}),
+                        }
+                    } else {
+                        try stdout.print("{s}: command not found\n", .{ext.args[0]});
                     }
                 },
             }
