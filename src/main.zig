@@ -12,6 +12,7 @@ const Command = union(enum) {
         program: []const u8,
         args: []const []const u8,
     },
+    Pwd,
 
     fn parse(input: []const u8, allocator: mem.Allocator) !Command {
         var parts = mem.split(u8, input, " ");
@@ -27,6 +28,8 @@ const Command = union(enum) {
             return Command{ .Echo = input[5..] };
         } else if (mem.eql(u8, first, "type")) {
             return Command{ .Type = input[5..] };
+        } else if (mem.eql(u8, first, "pwd")) {
+            return Command.Pwd;
         } else {
             var args = ArrayList([]const u8).init(allocator);
             try args.append(first);
@@ -79,13 +82,8 @@ pub fn main() !void {
                 .External => |ext| {
                     if (try findExecutable(allocator, ext.args[0]) != null) {
                         var child = std.process.Child.init(ext.args, allocator);
-                        // defer child.deinit();
-                        // child.stdin_behavior = .Inherit;
-                        // child.stdout_behavior = .Inherit;
-                        // child.stderr_behavior = .Inherit;
-                        // child.env_map = try std.process.getEnvMap(allocator);
-
                         const term = try child.spawnAndWait();
+
                         switch (term) {
                             .Exited => |code| {
                                 if (code != 0) {
@@ -98,13 +96,20 @@ pub fn main() !void {
                         try stdout.print("{s}: command not found\n", .{ext.args[0]});
                     }
                 },
+                .Pwd => {
+                    const pwd = std.process.getCwdAlloc(allocator) catch {
+                        try stdout.print("Failed to get current working directory\n", .{});
+                        continue;
+                    };
+                    try stdout.print("{s}\n", .{pwd});
+                },
             }
         }
     }
 }
 
 fn isBuiltinCommand(cmd: []const u8) bool {
-    const builtins = [_][]const u8{ "exit", "help", "echo", "type" };
+    const builtins = [_][]const u8{ "exit", "help", "echo", "type", "pwd" };
     for (builtins) |builtin| {
         if (std.mem.eql(u8, cmd, builtin)) {
             return true;
@@ -143,39 +148,3 @@ fn findExecutable(allocator: mem.Allocator, arg: []const u8) !?[]const u8 {
 
     return null;
 }
-
-// fn runExternalProgram(allocator: mem.Allocator, program: []const u8, args: []const []const u8) !void {
-//     var full_args = try ArrayList([]const u8).initCapacity(allocator, args.len + 1);
-//     defer full_args.deinit();
-//
-//     try full_args.append(program);
-//     try full_args.appendSlice(args);
-//
-//     var child = std.process.Child.init(full_args.items, allocator);
-//     child.stdin_behavior = .Inherit;
-//     child.stdout_behavior = .Pipe;
-//     child.stderr_behavior = .Pipe;
-//
-//     try child.spawn();
-//
-//     const stdout = try child.stdout.?.reader().readAllAlloc(allocator, 1024 * 1024);
-//     defer allocator.free(stdout);
-//
-//     const stderr = try child.stderr.?.reader().readAllAlloc(allocator, 1024 * 1024);
-//     defer allocator.free(stderr);
-//
-//     const term = try child.wait();
-//
-//     const stdoutWriter = std.io.getStdOut().writer();
-//     try stdoutWriter.writeAll(stdout);
-//     try stdoutWriter.writeAll(stderr);
-//
-//     switch (term) {
-//         .Exited => |code| {
-//             if (code != 0) {
-//                 try stdoutWriter.print("Program exited with non-zero status code: {d}\n", .{code});
-//             }
-//         },
-//         else => try stdoutWriter.print("Program terminated abnormally\n", .{}),
-//     }
-// }
